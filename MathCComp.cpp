@@ -9,9 +9,9 @@ unsigned int j = 0;
 unsigned int k = 0;
 unsigned int length = 0;
 unsigned int lineNumber = 0;
-unsigned char compInt = 0;
+unsigned short compInt = 0;
 unsigned int item = 0;
-unsigned int compVar = 0;
+unsigned char compVar = 0;
 unsigned char state = 0;
 unsigned char nested = 0;
 bool myBool = 0;
@@ -127,8 +127,15 @@ void compileExp(){
 		if((code[i]>47)&&(code[i]<58)){
 			numberParse();
 			if(secondOperand == 1){
-				result.push_back(0b11110111);
+				if(compInt > 0xFF){
+					result.push_back(0xF8);
+				}else{
+					result.push_back(0b11110111);
+				}
 				result.push_back(compInt);
+				if(compInt > 0xFF){
+					result.push_back(compInt/256);
+				}
 			}
 		}else if((code[i]>64)&&(code[i]<123)){
 			evalVarName();
@@ -234,8 +241,15 @@ void compileExp(){
 						result.push_back(0b11111111);
 						result.push_back(compVar);
 					}else{
-						result.push_back(0b11110111);
+						if(compInt > 0xFF){
+							result.push_back(0xF8);
+						}else{
+							result.push_back(0b11110111);
+						}
 						result.push_back(compInt);
+						if(compInt > 0xFF){
+							result.push_back(compInt/256);
+						}
 					}
 				}
 			}
@@ -248,8 +262,14 @@ void compileExp(){
 			result.push_back(0b11111111);
 			result.push_back(compVar);
 		}else{
-			result.push_back(0b11110111);
-			result.push_back(compInt);
+			if(compInt > 0xFF){
+				result.push_back(0xF8);
+				result.push_back(compInt);
+				result.push_back(compInt/256);
+			}else{
+				result.push_back(0b11110111);
+				result.push_back(compInt);
+			}
 		}
 	}
 }
@@ -257,11 +277,9 @@ int variable(){
 	i++;
 	result.push_back(chr);
 	if(chr&2){
+		result.push_back(compInt);
 		if(chr&8){
-			result.push_back(compInt);
 			result.push_back(compInt/256);
-		}else{
-			result.push_back(compInt);
 		}
 	}
 	//cout << "Created new variable ";
@@ -282,17 +300,6 @@ int variable(){
 		j++;
 	}
 }*/
-bool compare(string any_str){
-	j=0;
-	while(any_str[j]==code[i+j]){
-		j++;
-		if(j==(any_str.length())){
-			i=i+j;
-			return true;
-		}
-	}
-	return false;
-}
 int main(int argc, char* argv[]){
 	ifstream file;
 	file.open(argv[1]);
@@ -314,7 +321,7 @@ int main(int argc, char* argv[]){
 			result.push_back(0b11001010);
 			i++;
 		}
-		cout << code[i] << '=';
+		//cout << code[i] << '=';
 		if((code[i]=='/')&&(code[i+1]=='/')){
 			i=i+2;
 			while(code[i]!='\n'){
@@ -473,6 +480,7 @@ int main(int argc, char* argv[]){
 						chr = chr + 2;
 						i++;
 						numberParse();
+						cout << compInt << '-';
 						if(compInt>0xFF){
 							chr = chr + 8;
 						}
@@ -482,7 +490,7 @@ int main(int argc, char* argv[]){
 						evalVarName();
 						result.push_back(compVar);
 						break;
-					case 13: //char
+					case 13: //byte
 						i++;
 						while(code[i]!='\n'){
 							//cout << code[i];
