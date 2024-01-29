@@ -48,17 +48,23 @@ int exitWithError(string error){
 }
 void evalExp(){
 	unsigned int temporary;
-	if(bytecode[i] == 0xF7){
+	unsigned char temporary2;
+	if(bytecode[i] == 0xF7){ //8-bit constants
 		i++;
 		result = bytecode[i];
 		isNegative = 0;
+	}else if(bytecode[i] == 0xF8){ //16-bit constants
+		i++;
+		result = bytecode[i];
+		isNegative = 0;
+		i++;
+		result += (bytecode[i]*256);
 	}else if(bytecode[i] == 0xFF){
 		i++;
-		chr = varInfo[bytecode[i]].flags&0x10;
 		isNegative = !(varInfo[bytecode[i]].flags&1);
 		temporary = varInfo[bytecode[i]].address;
 		result = varAlloc[temporary];
-		if(chr){
+		if(varInfo[bytecode[i]].flags&0x10){
 			//cout << static_cast<unsigned int>(varAlloc[varInfo[(bytecode[i]*2)+1]]) << '|' << static_cast<unsigned int>(varAlloc[varInfo[(bytecode[i]*2)+1]+1]) << '\n';
 			temporary++;
 			isNegative = ((varAlloc[temporary]&0x80) != 0) && isNegative;
@@ -66,31 +72,33 @@ void evalExp(){
 		}else{
 			isNegative = (((result&0x80) != 0) && isNegative);
 		}
-	}else if(bytecode[i] == 0b11100101){
+	}else if(bytecode[i] == 0b10100101){
 		i++;
 		temporary = varInfo[bytecode[i]].address;
-		chr = bytecode[i];
+		temporary2 = bytecode[i];
 		i++;
 		evalExp();
-		if(varInfo[chr].flags&0x10){
+		if(varInfo[temporary2].flags&0x10){
 			result = result * 2;
 		}
 		temporary = temporary + result;
-		if(chr == (varInfo.size()-1)){
-			if(result>=(varInfo.size())){
+		//cout << '_' << static_cast<unsigned int>(temporary2);
+		if(temporary2 == (varInfo.size()-1)){
+			if(temporary>=(varAlloc.size())){
 				exitWithError("Operand in . bigger than allocated memory");
 			}
 		}else{
-			if(result>=(varInfo[chr+1].address)){
+			if(temporary>=(varInfo[temporary2+1].address)){
 				exitWithError("Operand in . bigger than size of variable");
 			}
 		}
+		//cout << temporary << '-';
 		result = varAlloc[temporary];
-		if(varInfo[chr].flags&0x10){
+		if(varInfo[temporary2].flags&0x10){
 			temporary++;
 			result = result + varAlloc[temporary]*256;
 		}
-	}else if(bytecode[i] == 0b11101011){
+	}else if(bytecode[i] == 0b10101011){
 		i++;
 		temporary = ((varInfo[bytecode[i]].flags&0x10)/0x10)+1;
 		if(static_cast<size_t>(bytecode[i])==static_cast<size_t>(varInfo.size()-1)){
@@ -350,27 +358,24 @@ int main(int argc, char* argv[]){
 				case 0b11000110: //variable[i] = value / .INTEGERvariable = value
 					i++;
 					TEMP = bytecode[i];
-					if(isInDebugMode){
-						identNumberOfTabs();
-						cout << '$' << TEMP << '.';
-					}
 					i++;
 					evalExp();
+					if(varInfo[TEMP].flags&0x10){
+						result = result*2;
+					}
 					TEMP2 = result+(varInfo[TEMP].address);
-					cout << TEMP2;
+					if(isInDebugMode){
+						identNumberOfTabs();
+						cout << '$' << TEMP << '.' << TEMP2;
+					}
 					if(TEMP == (varInfo.size()-1)){
-						TEMP3 = varInfo.size();
+						TEMP3 = varAlloc.size();
 					}else{
 						TEMP3 = varInfo[TEMP+1].address;
 					}
 					//cout << (varInfo[bytecode[i-1]+1].address - 1) << ' ';
 					if(TEMP2>=TEMP3){
 						exitWithError("Buffer overflow error!");
-					}else{
-						varAlloc.erase(varAlloc.begin() + static_cast<size_t>(TEMP));
-					}
-					if(varInfo[TEMP].flags&0x10){
-						result = result*2;
 					}
 					i++;
 					evalExp();
@@ -401,30 +406,23 @@ int main(int argc, char* argv[]){
 					break;
 				case 0b11001000: //delete
 					i=i+2;
-					TEMP = (varInfo[bytecode[i-1]].address + bytecode[i]);
+					TEMP = bytecode[i];
 					if(varInfo[bytecode[i-1]].flags&0x10){
 						TEMP = TEMP * 2;
 					}
+					TEMP = varInfo[bytecode[i-1]].address + TEMP;
 					if(bytecode[i-1] == (varInfo.size()-1)){
-						TEMP2 = varInfo.size();
+						TEMP2 = varAlloc.size();
 					}else{
 						TEMP2 = varInfo[bytecode[i-1]+1].address;
 					}
-					//cout << (varInfo[bytecode[i-1]+1].address - 1) << ' ';
 					if(TEMP>=TEMP2){
 						exitWithError("Buffer overflow error!");
-					}else{
-						varAlloc.erase(varAlloc.begin() + static_cast<size_t>(TEMP));
 					}
-					TEMP2 = bytecode[i-1];
-					TEMP2++;
-					while(static_cast<size_t>(TEMP2) < varInfo.size()){
-						//cout << TEMP2;
-						if(TEMP==2){
-							varInfo[TEMP2].address--;
-						}
-						varInfo[TEMP2].address--;
-						TEMP2++;
+					//This is code which deletes two bytes [(varAlloc.begin() + TEMP) - (varAlloc.begin() + TEMP + 1)]
+					varAlloc.erase(varAlloc.begin() + TEMP);
+					if(varInfo[bytecode[i-1]].flags&0x10){
+						varAlloc.erase(varAlloc.begin() + TEMP);
 					}
 					if(isInDebugMode){
 						identNumberOfTabs();
@@ -443,7 +441,7 @@ int main(int argc, char* argv[]){
 						TEMP2++;
 						while(static_cast<size_t>(TEMP2) < varInfo.size()){
 							//cout << TEMP2;
-							varInfo[TEMP2].address = varInfo[TEMP2].address + (bytecode[i]*TEMP);
+							varInfo[TEMP2].address += (bytecode[i]*TEMP);
 							TEMP2++;
 						}
 					}
@@ -454,19 +452,20 @@ int main(int argc, char* argv[]){
 					break;
 				case 0b11001011: {//load Windows.dll
 					i++;
-					myString = "";
-					while(bytecode[i]!=1){
-						myString.push_back(bytecode[i]);
-						i++;
+					unsigned int j = i;
+					while(bytecode[j]!=1){
+						j++;
 					}
+					string myString(bytecode.begin() + static_cast<size_t>(i), bytecode.begin() + static_cast<size_t>(j));
+					j++;
+					i = j;
 					hDll = LoadLibrary(myString.c_str());
-					myString = "";
-					i++;
-					while(bytecode[i]!='\0'){
-						myString.push_back(bytecode[i]);
-						i++;
+					while(bytecode[j]!='\0'){
+						j++;
 					}
-					myFunction = reinterpret_cast<myFunctionType>(GetProcAddress(hDll, myString.c_str()));
+					string myString2(bytecode.begin() + static_cast<size_t>(i), bytecode.begin() + static_cast<size_t>(j));
+					myFunction = reinterpret_cast<myFunctionType>(GetProcAddress(hDll, myString2.c_str()));
+					i = j;
 					i++;
 					if(static_cast<size_t>(bytecode[i]) == (varInfo.size()-1)){
 						TEMP4 = varAlloc.begin()+varInfo[bytecode[i]+1].address;
@@ -591,19 +590,20 @@ int main(int argc, char* argv[]){
 			if(bytecode[i] & 2){
 				i++;
 				TEMP = bytecode[i];
-				if(bytecode[i] & 8){
+				if(bytecode[i-1] & 8){
 					i++;
-					TEMP = TEMP + bytecode[i];
+					TEMP = TEMP + (bytecode[i])*256;
 				}
 			}else{
 				TEMP = 1;
-			}
+			}			
 			if(chr&0x10){
 				chr = 2;
 			}else{
 				chr = 1;
 			}
 			varAlloc.resize(varAlloc.size()+(TEMP*chr));
+			//cout << '-' << varAlloc.size();
 			//cout << "SIZE" << varAlloc.size();
 			//cout << 'S' << varAlloc.size();
 		}
