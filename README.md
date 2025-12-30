@@ -1,4 +1,5 @@
 ### THE PORT PROGRAMMING LANGUAGE
+It only works on Windows, I think. I made this a while ago.
 
 A very lightweight interpreted language designed to be run by my own runtime which has a less than 2KB of data. It is designed also to be efficient and to have the same level of control as languagse like C, C++ or Rust and yet be interpreted. I originally wanted to make this language as the language for a software that could dectect what your code is doing because inductive reasoning. It is supposed to extended thru extensions, libraries and dialects. I implemented it myself in C++ in less than a month working a lot on this language.
 
